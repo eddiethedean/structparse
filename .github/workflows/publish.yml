@@ -103,21 +103,29 @@ jobs:
       - name: Combine artifacts
         shell: bash
         run: |
+          # Create clean dist directory
+          rm -rf dist
           mkdir -p dist
-          # Copy wheels
+          
+          # Copy wheels from wheels directory
           if [ -d dist/wheels ]; then
-            cp dist/wheels/*.whl dist/ 2>/dev/null || true
+            find dist/wheels -name "*.whl" -exec cp {} dist/ \;
           fi
-          # Copy sdist
+          
+          # Copy sdist from sdist directory
           if [ -d dist/sdist ]; then
-            cp dist/sdist/*.tar.gz dist/ 2>/dev/null || true
+            find dist/sdist -name "*.tar.gz" -exec cp {} dist/ \;
           fi
+          
+          # Remove the temporary directories
+          rm -rf dist/wheels dist/sdist
+          
           # List final contents
           echo "Final dist contents:"
           ls -la dist/
           echo ""
-          echo "Checking for required files:"
-          find dist -name "*.whl" -o -name "*.tar.gz" || echo "No distribution files found!"
+          echo "Distribution files:"
+          find dist -type f \( -name "*.whl" -o -name "*.tar.gz" \)
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
