@@ -60,7 +60,7 @@ jobs:
       - name: Build extension module
         shell: bash
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
             .venv/Scripts/python -m pip install maturin
             .venv/Scripts/maturin develop --release
           else
@@ -71,7 +71,7 @@ jobs:
       - name: Run pytest suite
         shell: bash
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
             .venv/Scripts/python -m pytest tests/ -v
           else
             source .venv/bin/activate
