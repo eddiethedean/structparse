@@ -70,28 +70,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install maturin pytest
 
-    - name: Build wheels
-      run: maturin build --release --out dist
-
-    - name: List built wheels
-      shell: bash
+    - name: Build and install package
       run: |
-        ls -la dist/ || echo "No dist directory found"
-        find dist -name "*.whl" || echo "No wheels found"
-
-    - name: Install package
-      shell: bash
-      run: |
-        python -m pip install $(find dist -name "*.whl" | head -1)
+        maturin develop --release
 
     - name: Run tests
       run: |
         python -m pytest tests/ -v
-
-    - name: Upload wheels
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-      uses: actions/upload-artifact@v4
-      with:
-        name: wheels
-        path: dist/*.whl
-        retention-days: 1
