@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           source .venv/bin/activate
-          pytest
+          python -m pytest tests/ -v
 
       - name: Run cargo tests
         run: cargo test
