@@ -22,8 +22,6 @@ jobs:
             python-version: "3.11"
           - os: ubuntu-latest
             python-version: "3.12"
-          - os: ubuntu-latest
-            python-version: "3.13"
           - os: macos-latest
             python-version: "3.9"
           - os: macos-latest
@@ -32,8 +30,6 @@ jobs:
             python-version: "3.11"
           - os: macos-latest
             python-version: "3.12"
-          - os: macos-latest
-            python-version: "3.13"
           - os: windows-latest
             python-version: "3.9"
           - os: windows-latest
@@ -42,8 +38,6 @@ jobs:
             python-version: "3.11"
           - os: windows-latest
             python-version: "3.12"
-          - os: windows-latest
-            python-version: "3.13"
 
     steps:
     - uses: actions/checkout@v4
@@ -52,7 +46,6 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-      continue-on-error: ${{ matrix.python-version == '3.13' }}
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -78,16 +71,18 @@ jobs:
         pip install maturin pytest
 
     - name: Build wheels
-      shell: bash
       run: maturin build --release --out dist
-      env:
-        MATURIN_PEP517_ARGS: --quiet
+
+    - name: List built wheels
+      shell: bash
+      run: |
+        ls -la dist/ || echo "No dist directory found"
+        find dist -name "*.whl" || echo "No wheels found"
 
     - name: Install package
       shell: bash
       run: |
-        ls -la dist/ || echo "No dist directory"
-        python -m pip install dist/*.whl || python -m pip install dist/*.whl --force-reinstall --no-deps
+        python -m pip install $(find dist -name "*.whl" | head -1)
 
     - name: Run tests
       run: |
@@ -100,4 +95,3 @@ jobs:
         name: wheels
         path: dist/*.whl
         retention-days: 1
-
