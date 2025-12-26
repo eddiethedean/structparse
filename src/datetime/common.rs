@@ -1,6 +1,28 @@
 use pyo3::prelude::*;
 use regex::Regex;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
+
+// Cached regex patterns for timezone and time parsing
+pub(crate) static RE_TZ_COLON: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"([+-])(\d{1,2}):?(\d{2})").unwrap()
+});
+
+pub(crate) static RE_TZ_4DIGIT: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"([+-])(\d{4})").unwrap()
+});
+
+pub(crate) static RE_TZ_IN_STRING: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\s+([+-]\d{2}:?\d{2})$").unwrap()
+});
+
+pub(crate) static RE_TZ_IN_STRING_EXTENDED: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\s+([+-]\d{2}:?\d{2,4})$").unwrap()
+});
+
+pub(crate) static RE_TIME_24H: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(\d{1,2}):(\d{2})(?::(\d{2}))?").unwrap()
+});
 
 /// Month name to number mapping (abbreviated and full names)
 pub fn get_month_map() -> HashMap<&'static str, u8> {
@@ -35,30 +57,26 @@ pub fn create_fixed_tz(py: Python, offset_minutes: i32, name: &str) -> PyResult<
 /// Handles formats: +1:00, +10:00, +10:30, +1000, etc.
 pub fn parse_timezone(py: Python, tz_str: &str) -> PyResult<PyObject> {
     // Handle formats: +1:00, +10:00, +10:30, +1000, etc.
-    if let Ok(re) = Regex::new(r"([+-])(\d{1,2}):?(\d{2})") {
-        if let Some(caps) = re.captures(tz_str) {
-            if let (Some(sign_match), Some(hour_match), Some(min_match)) = (caps.get(1), caps.get(2), caps.get(3)) {
-                let sign = if sign_match.as_str() == "+" { 1 } else { -1 };
-                let hour: i32 = hour_match.as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid timezone"))?;
-                let min: i32 = min_match.as_str().parse().unwrap_or(0);
-                let offset_minutes = sign * (hour * 60 + min);
-                return create_fixed_tz(py, offset_minutes, "");
-            }
+    if let Some(caps) = RE_TZ_COLON.captures(tz_str) {
+        if let (Some(sign_match), Some(hour_match), Some(min_match)) = (caps.get(1), caps.get(2), caps.get(3)) {
+            let sign = if sign_match.as_str() == "+" { 1 } else { -1 };
+            let hour: i32 = hour_match.as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid timezone"))?;
+            let min: i32 = min_match.as_str().parse().unwrap_or(0);
+            let offset_minutes = sign * (hour * 60 + min);
+            return create_fixed_tz(py, offset_minutes, "");
         }
     }
     // Also handle 4-digit format: +1000 (1 hour, 00 minutes)
-    if let Ok(re) = Regex::new(r"([+-])(\d{4})") {
-        if let Some(caps) = re.captures(tz_str) {
-            if let (Some(sign_match), Some(tz_match)) = (caps.get(1), caps.get(2)) {
-                let sign = if sign_match.as_str() == "+" { 1 } else { -1 };
-                let tz_str = tz_match.as_str();
-                // Regex ensures exactly 4 digits, but add defensive check
-                if tz_str.len() >= 4 {
-                    let hour: i32 = tz_str[..2].parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid timezone"))?;
-                    let min: i32 = tz_str[2..4].parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid timezone"))?;
-                    let offset_minutes = sign * (hour * 60 + min);
-                    return create_fixed_tz(py, offset_minutes, "");
-                }
+    if let Some(caps) = RE_TZ_4DIGIT.captures(tz_str) {
+        if let (Some(sign_match), Some(tz_match)) = (caps.get(1), caps.get(2)) {
+            let sign = if sign_match.as_str() == "+" { 1 } else { -1 };
+            let tz_str = tz_match.as_str();
+            // Regex ensures exactly 4 digits, but add defensive check
+            if tz_str.len() >= 4 {
+                let hour: i32 = tz_str[..2].parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid timezone"))?;
+                let min: i32 = tz_str[2..4].parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid timezone"))?;
+                let offset_minutes = sign * (hour * 60 + min);
+                return create_fixed_tz(py, offset_minutes, "");
             }
         }
     }
@@ -74,38 +92,32 @@ pub fn parse_time_with_ampm(time_str: &str) -> Result<(u8, u8, u8), PyErr> {
     
     if let Some(ampm_idx) = time_str.to_uppercase().find("AM") {
         let time_part = &time_str[..ampm_idx].trim();
-        if let Ok(re) = Regex::new(r"(\d{1,2}):(\d{2})(?::(\d{2}))?") {
-            if let Some(caps) = re.captures(time_part) {
-                hour = caps.get(1).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid hour"))?;
-                minute = caps.get(2).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid minute"))?;
-                second = caps.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
-                // 12 AM becomes 0 (midnight), other AM hours stay as-is
-                if hour == 12 {
-                    hour = 0;
-                }
+        if let Some(caps) = RE_TIME_24H.captures(time_part) {
+            hour = caps.get(1).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid hour"))?;
+            minute = caps.get(2).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid minute"))?;
+            second = caps.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
+            // 12 AM becomes 0 (midnight), other AM hours stay as-is
+            if hour == 12 {
+                hour = 0;
             }
         }
     } else if let Some(pm_idx) = time_str.to_uppercase().find("PM") {
         let time_part = &time_str[..pm_idx].trim();
-        if let Ok(re) = Regex::new(r"(\d{1,2}):(\d{2})(?::(\d{2}))?") {
-            if let Some(caps) = re.captures(time_part) {
-                hour = caps.get(1).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid hour"))?;
-                minute = caps.get(2).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid minute"))?;
-                second = caps.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
-                // 12 PM stays as 12 (noon), other PM hours add 12
-                if hour != 12 {
-                    hour += 12;
-                }
+        if let Some(caps) = RE_TIME_24H.captures(time_part) {
+            hour = caps.get(1).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid hour"))?;
+            minute = caps.get(2).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid minute"))?;
+            second = caps.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
+            // 12 PM stays as 12 (noon), other PM hours add 12
+            if hour != 12 {
+                hour += 12;
             }
         }
     } else {
         // 24-hour format
-        if let Ok(re) = Regex::new(r"(\d{1,2}):(\d{2})(?::(\d{2}))?") {
-            if let Some(caps) = re.captures(time_str) {
-                hour = caps.get(1).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid hour"))?;
-                minute = caps.get(2).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid minute"))?;
-                second = caps.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
-            }
+        if let Some(caps) = RE_TIME_24H.captures(time_str) {
+            hour = caps.get(1).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid hour"))?;
+            minute = caps.get(2).unwrap().as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid minute"))?;
+            second = caps.get(3).map(|m| m.as_str().parse().unwrap_or(0)).unwrap_or(0);
         }
     }
     

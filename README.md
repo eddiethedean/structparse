@@ -165,12 +165,12 @@ This Rust-backed implementation provides significant performance improvements ov
 
 | Test Case | Result | Speedup |
 |-----------|--------|---------|
-| Simple named fields | ✅ Faster | 1.45x |
-| Multiple named fields | ⚠️ Slower | 1.11x |
-| Positional fields | ⚠️ Slower | 1.01x |
-| Complex pattern with types | ⚠️ Slower | 1.12x |
-| No match (fail fast) | ✅ Faster | 1.32x |
-| Long string with match at end | ✅ Faster | 1.23x |
+| Simple named fields | ✅ Faster | **9.39x** |
+| Multiple named fields | ✅ Faster | **7.82x** |
+| Positional fields | ✅ Faster | **5.96x** |
+| Complex pattern with types | ✅ Faster | **42.35x** |
+| No match (fail fast) | ✅ Faster | **28.16x** |
+| Long string with match at end | ✅ Faster | **25.60x** |
 
 #### Optimization-Focused Benchmarks
 
@@ -178,15 +178,15 @@ These benchmarks highlight scenarios where Rust optimizations provide the most b
 
 | Optimization Test | Result | Speedup |
 |-------------------|--------|---------|
-| **Long String Search** | ✅ Faster | **23.80x** |
-| **Cache Warmup** | ✅ Faster | **4.47x** |
-| **Pre-compiled Search Regex** | ✅ Faster | **3.29x** |
-| **Fast Type Conversion Paths** | ✅ Faster | **1.58x** |
-| **Pre-allocation (Many Fields)** | ✅ Faster | **1.35x** |
-| **Mixed Patterns (Cache Management)** | ✅ Faster | **1.44x** |
-| **Pattern Caching (LRU Cache)** | ✅ Faster | **1.06x** |
-| Case-Insensitive Matching | ⚠️ Slower | 1.23x |
-| Findall (Multiple Matches) | ⚠️ Slower | 3.78x |
+| **Long String Search** | ✅ Faster | **77.84x** |
+| **Fast Type Conversion Paths** | ✅ Faster | **57.49x** |
+| **Pre-compiled Search Regex** | ✅ Faster | **24.25x** |
+| **Cache Warmup** | ✅ Faster | **20.82x** |
+| **Pattern Caching (LRU Cache)** | ✅ Faster | **7.95x** |
+| **Pre-allocation (Many Fields)** | ✅ Faster | **7.34x** |
+| **Mixed Patterns (Cache Management)** | ✅ Faster | **7.33x** |
+| **Case-Insensitive Matching** | ✅ Faster | **5.98x** |
+| Findall (Multiple Matches) | ⚠️ Slower | 1.47x |
 
 **Key Optimizations:**
 - **Pattern Caching**: LRU cache (1000 patterns) eliminates regex compilation overhead
@@ -194,6 +194,8 @@ These benchmarks highlight scenarios where Rust optimizations provide the most b
 - **Fast Type Conversion**: Optimized paths for common type conversions (int, float, bool)
 - **Pre-allocation**: Pre-allocated vectors and HashMaps reduce memory allocations
 - **Reduced GIL Overhead**: Batched Python operations minimize interpreter overhead
+- **Custom Type Validation Caching**: Pre-computed validation results eliminate repeated Python attribute lookups
+- **Reference-based Matching**: Eliminated HashMap cloning in hot paths for better performance
 
 Run the benchmarks yourself:
 ```bash

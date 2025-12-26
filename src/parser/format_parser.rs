@@ -23,6 +23,7 @@ pub struct FormatParser {
     #[allow(dead_code)]
     name_mapping: std::collections::HashMap<String, String>,  // Map normalized -> original
     stored_extra_types: Option<HashMap<String, PyObject>>,  // Store extra_types for use during conversion
+    pub(crate) custom_type_groups: Vec<usize>,  // Cached pattern_groups per field (for custom types)
 }
 
 impl FormatParser {
@@ -50,6 +51,24 @@ impl FormatParser {
         
         let (regex_str_with_anchors, regex_str, field_specs, field_names, normalized_names, name_mapping) = crate::parser::pattern::parse_pattern(pattern, extra_types.as_ref(), &custom_patterns)?;
         
+        // Pre-compute custom type validation results (pattern_groups per field)
+        // This avoids calling validate_custom_type_pattern for every match
+        let custom_type_groups = Python::with_gil(|py| -> PyResult<Vec<usize>> {
+            let mut groups = Vec::with_capacity(field_specs.len());
+            let empty_map = std::collections::HashMap::new();
+            let custom_converters = extra_types.as_ref().map(|et| et as &HashMap<String, PyObject>).unwrap_or(&empty_map);
+            
+            for spec in &field_specs {
+                if !custom_converters.is_empty() {
+                    let pattern_groups = crate::parser::matching::validate_custom_type_pattern(spec, custom_converters, py)?;
+                    groups.push(pattern_groups);
+                } else {
+                    groups.push(0);
+                }
+            }
+            Ok(groups)
+        })?;
+        
         // Build regex with DOTALL flag
         let regex = crate::parser::regex::build_regex(&regex_str_with_anchors)?;
 
@@ -72,6 +91,7 @@ impl FormatParser {
             normalized_names,
             name_mapping,
             stored_extra_types: extra_types,
+            custom_type_groups,
         })
     }
 
@@ -91,6 +111,7 @@ impl FormatParser {
         
         Python::with_gil(|py| {
             if search_regex.captures(string).is_some() {
+                let extra_types_ref = &extra_types.as_ref().map(|et| et.clone()).unwrap_or_default();
                 return crate::parser::matching::match_with_regex(
                     search_regex,
                     string,
@@ -99,7 +120,7 @@ impl FormatParser {
                     &self.field_names,
                     &self.normalized_names,
                     py,
-                    extra_types.unwrap_or_default(),
+                    extra_types_ref,
                     evaluate_result,
                 );
             }
@@ -122,6 +143,7 @@ impl FormatParser {
                 self.regex_case_insensitive.as_ref().unwrap_or(&self.regex)
             };
 
+            let extra_types_ref = &extra_types.as_ref().map(|et| et.clone()).unwrap_or_default();
             crate::parser::matching::match_with_regex(
                 regex,
                 string,
@@ -130,7 +152,7 @@ impl FormatParser {
                 &self.field_names,
                 &self.normalized_names,
                 py,
-                extra_types.unwrap_or_default(),
+                extra_types_ref,
                 evaluate_result,
             )
         })
@@ -149,6 +171,15 @@ impl FormatParser {
     #[allow(dead_code)]
     pub(crate) fn get_normalized_names(&self) -> &Vec<Option<String>> {
         &self.normalized_names
+    }
+    
+    /// Get the search regex for a given case sensitivity
+    pub(crate) fn get_search_regex(&self, case_sensitive: bool) -> &Regex {
+        if case_sensitive {
+            &self.search_regex
+        } else {
+            self.search_regex_case_insensitive.as_ref().unwrap_or(&self.search_regex)
+        }
     }
 }
 

@@ -1,6 +1,16 @@
 use pyo3::prelude::*;
 use regex::Regex;
-use crate::datetime::common::{get_month_map, parse_timezone};
+use once_cell::sync::Lazy;
+use crate::datetime::common::{get_month_map, parse_timezone, RE_TZ_IN_STRING};
+
+// Cached regex patterns for global datetime parsing
+static RE_GLOBAL_NUMERIC: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(.+))?$").unwrap()
+});
+
+static RE_GLOBAL_NAMED: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(\d{1,2})[-/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)[-/](\d{4})(?:\s+(.+))?$").unwrap()
+});
 
 /// Parse Global (day/month) datetime format
 /// Formats: 21/11/2011, 21-11-2011, 21-Nov-2011, 21-November-2011
@@ -21,9 +31,8 @@ pub fn parse_global_datetime(py: Python, value: &str) -> PyResult<PyObject> {
     };
     
     // Try numeric format: 21/11/2011 or 21-11-2011 with optional time/timezone
-    if let Ok(re) = Regex::new(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(.+))?$") {
-        if let Some(caps) = re.captures(value) {
-            if let (Some(day_match), Some(month_match), Some(year_match)) = (caps.get(1), caps.get(2), caps.get(3)) {
+    if let Some(caps) = RE_GLOBAL_NUMERIC.captures(value) {
+        if let (Some(day_match), Some(month_match), Some(year_match)) = (caps.get(1), caps.get(2), caps.get(3)) {
                 let day: u8 = day_match.as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid day"))?;
                 let month: u8 = month_match.as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid month"))?;
                 let year: i32 = year_match.as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid year"))?;
@@ -31,7 +40,7 @@ pub fn parse_global_datetime(py: Python, value: &str) -> PyResult<PyObject> {
                 let (hour, minute, second) = if let Some(time_part) = caps.get(4) {
                     let time_str = time_part.as_str().trim();
                     // Check if there's a timezone
-                    if let Some(tz_match) = Regex::new(r"\s+([+-]\d{2}:?\d{2})$").ok().and_then(|re| re.captures(time_str)).and_then(|c| c.get(1)) {
+                    if let Some(tz_match) = RE_TZ_IN_STRING.captures(time_str).and_then(|c| c.get(1)) {
                         let tz_str = tz_match.as_str();
                         let time_only = time_str[..time_str.len() - tz_str.len()].trim();
                         let (h, m, s) = parse_time_with_ampm(time_only)?;
@@ -47,14 +56,12 @@ pub fn parse_global_datetime(py: Python, value: &str) -> PyResult<PyObject> {
                 
                 let dt = datetime_class.call1((year, month, day, hour, minute, second, 0, py.None()))?;
                 return Ok(dt.to_object(py));
-            }
         }
     }
     
     // Try named month format: 21-Nov-2011 or 21-November-2011
-    if let Ok(re) = Regex::new(r"^(\d{1,2})[-/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|May|June|July|August|September|October|November|December)[-/](\d{4})(?:\s+(.+))?$") {
-        if let Some(caps) = re.captures(value) {
-            if let (Some(day_match), Some(month_match), Some(year_match)) = (caps.get(1), caps.get(2), caps.get(3)) {
+    if let Some(caps) = RE_GLOBAL_NAMED.captures(value) {
+        if let (Some(day_match), Some(month_match), Some(year_match)) = (caps.get(1), caps.get(2), caps.get(3)) {
                 let day: u8 = day_match.as_str().parse().map_err(|_| PyErr::new::<pyo3::exceptions::PyValueError, _>("Invalid day"))?;
                 let month_name = month_match.as_str();
                 let month = *month_map.get(month_name).ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid month: {}", month_name)))?;
@@ -62,7 +69,7 @@ pub fn parse_global_datetime(py: Python, value: &str) -> PyResult<PyObject> {
                 
                 let (hour, minute, second, tzinfo) = if let Some(time_part) = caps.get(4) {
                     let time_str = time_part.as_str().trim();
-                    if let Some(tz_match) = Regex::new(r"\s+([+-]\d{2}:?\d{2})$").ok().and_then(|re| re.captures(time_str)).and_then(|c| c.get(1)) {
+                    if let Some(tz_match) = RE_TZ_IN_STRING.captures(time_str).and_then(|c| c.get(1)) {
                         let tz_str = tz_match.as_str();
                         let time_only = time_str[..time_str.len() - tz_str.len()].trim();
                         let (h, m, s) = parse_time_with_ampm(time_only)?;
@@ -78,7 +85,6 @@ pub fn parse_global_datetime(py: Python, value: &str) -> PyResult<PyObject> {
                 
                 let dt = datetime_class.call1((year, month, day, hour, minute, second, 0, tzinfo))?;
                 return Ok(dt.to_object(py));
-            }
         }
     }
     

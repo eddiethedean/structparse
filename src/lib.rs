@@ -13,7 +13,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -36,7 +36,8 @@ pub use match_rs::Match;
 // Pattern cache for compiled FormatParser instances
 // Cache size: 1000 patterns
 // Using u64 hash as key for faster lookups
-static PATTERN_CACHE: Lazy<Mutex<LruCache<u64, FormatParser>>> = Lazy::new(|| {
+// Using Arc to avoid expensive clones
+static PATTERN_CACHE: Lazy<Mutex<LruCache<u64, Arc<FormatParser>>>> = Lazy::new(|| {
     Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))
 });
 
@@ -59,22 +60,23 @@ fn create_cache_key_hash(pattern: &str, extra_types: &Option<HashMap<String, PyO
 fn get_or_create_parser(
     pattern: &str,
     extra_types: Option<HashMap<String, PyObject>>,
-) -> PyResult<FormatParser> {
+) -> PyResult<Arc<FormatParser>> {
     let cache_key = create_cache_key_hash(pattern, &extra_types);
     
-    // Try to get from cache
-    {
+    // Try to get from cache (minimize lock scope)
+    let cached = {
         let mut cache = PATTERN_CACHE.lock().unwrap();
-        if let Some(cached_parser) = cache.get(&cache_key) {
-            // Clone the parser (FormatParser is Clone)
-            return Ok(cached_parser.clone());
-        }
+        cache.get(&cache_key).cloned()
+    };
+    
+    if let Some(cached_parser) = cached {
+        return Ok(cached_parser);
     }
     
     // Not in cache, create new parser
-    let parser = FormatParser::new_with_extra_types(pattern, extra_types)?;
+    let parser = Arc::new(FormatParser::new_with_extra_types(pattern, extra_types)?);
     
-    // Store in cache
+    // Store in cache (minimize lock scope)
     {
         let mut cache = PATTERN_CACHE.lock().unwrap();
         cache.put(cache_key, parser.clone());
@@ -157,50 +159,62 @@ fn findall(
     evaluate_result: bool,
 ) -> PyResult<Vec<PyObject>> {
     let parser = get_or_create_parser(pattern, extra_types.clone())?;
-    let mut results = Vec::new();
-    let mut pos = 0;
     
-    while pos < string.len() {
-        if let Some(result) = parser.search_pattern(&string[pos..], case_sensitive, extra_types.clone(), evaluate_result)? {
-            Python::with_gil(|py| {
-                // Get span from result (relative to search start, which is pos)
-                let span_end = if let Ok(parse_result) = result.bind(py).downcast::<ParseResult>() {
-                    parse_result.borrow().span.1
-                } else if let Ok(match_obj) = result.bind(py).downcast::<Match>() {
-                    match_obj.borrow().span.1
-                } else {
-                    0
-                };
+    // Use single GIL acquisition for entire operation
+    Python::with_gil(|py| -> PyResult<Vec<PyObject>> {
+        // Get the search regex from the parser
+        let search_regex = parser.get_search_regex(case_sensitive);
+        
+        // Pre-allocate results vector with reasonable default capacity
+        // This reduces reallocations for common cases (1-10 matches)
+        let mut results = Vec::with_capacity(10);
+        let mut last_end = 0;
+        
+        // Pre-clone extra_types once if it exists, or create empty HashMap for reference
+        // This avoids cloning on every iteration
+        let extra_types_for_matching = extra_types.as_ref().map(|et| et.clone()).unwrap_or_default();
+        
+        // Use captures_iter to get all matches with their capture groups efficiently
+        for captures in search_regex.captures_iter(string) {
+            let full_match = captures.get(0).unwrap();
+            let match_start = full_match.start();
+            let match_end = full_match.end();
+            
+            // Skip overlapping matches (start before previous match ended)
+            if match_start < last_end {
+                continue;
+            }
+            
+            // Pass reference to extra_types (no cloning needed)
+            let extra_types_ref = &extra_types_for_matching;
+            
+            // Process the match using captures directly (optimized - no re-matching, no cloning, no validation)
+            if let Some(result) = crate::parser::matching::match_with_captures(
+                &captures,
+                string,
+                match_start,
+                &parser.pattern,
+                &parser.field_specs,
+                &parser.field_names,
+                &parser.normalized_names,
+                &parser.custom_type_groups,
+                py,
+                extra_types_ref,
+                evaluate_result,
+            )? {
+                // Result already has correct absolute positions, no adjustment needed
+                results.push(result);
+                last_end = match_end;
                 
-                // Adjust offset for ParseResult
-                let adjusted_result = if evaluate_result {
-                    if let Ok(parse_result) = result.bind(py).downcast::<ParseResult>() {
-                        let result_value = parse_result.borrow();
-                        Py::new(py, result_value.clone().with_offset(pos))?.to_object(py)
-                    } else {
-                        result
-                    }
-                } else {
-                    result
-                };
-                
-                results.push(adjusted_result);
-                
-                // Advance position: start from the end of the match, or start+1 if match was empty
-                let new_pos = pos + span_end;
-                if new_pos == pos {
-                    pos += 1; // Avoid infinite loop if match was empty
-                } else {
-                    pos = new_pos;
+                // Avoid infinite loop if match was empty
+                if match_start == match_end {
+                    last_end += 1;
                 }
-                Ok::<(), PyErr>(())
-            })?;
-        } else {
-            pos += 1; // Try next position
+            }
         }
-    }
-    
-    Ok(results)
+        
+        Ok(results)
+    })
 }
 
 /// Compile a pattern into a FormatParser for reuse

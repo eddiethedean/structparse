@@ -239,6 +239,160 @@ pub fn validate_custom_type_pattern(
     Ok(pattern_groups)
 }
 
+/// Match using existing captures (optimized for findall)
+/// Note: captures are from the full string, so positions are already absolute
+pub fn match_with_captures(
+    captures: &Captures,
+    _string: &str,
+    _match_start: usize,
+    pattern: &str,
+    field_specs: &[FieldSpec],
+    field_names: &[Option<String>],
+    normalized_names: &[Option<String>],
+    custom_type_groups: &[usize],  // Pre-computed pattern_groups per field
+    py: Python,
+    custom_converters: &HashMap<String, PyObject>,
+    evaluate_result: bool,
+) -> PyResult<Option<PyObject>> {
+    let full_match = captures.get(0).unwrap();
+    let start = full_match.start();  // Already absolute position in full string
+    let end = full_match.end();      // Already absolute position in full string
+    
+    // Pre-allocate with capacity based on expected field count
+    let field_count = field_specs.len();
+    let mut fixed = Vec::with_capacity(field_count);
+    let mut named: HashMap<String, PyObject> = HashMap::with_capacity(field_count);
+    let mut field_spans: HashMap<String, (usize, usize)> = HashMap::with_capacity(field_count);
+    let mut captures_vec = Vec::with_capacity(field_count);  // For Match object when evaluate_result=False
+    let mut named_captures = HashMap::with_capacity(field_count);  // For Match object when evaluate_result=False
+    let mut group_offset = 0;
+    // Track the actual capture group index (accounts for both named and unnamed groups)
+    let mut actual_capture_index = 1;  // Start at 1 (group 0 is full match)
+    
+    for (i, spec) in field_specs.iter().enumerate() {
+        // Use pre-computed pattern_groups (cached during FormatParser creation)
+        let pattern_groups = custom_type_groups.get(i).copied().unwrap_or(0);
+        
+        // Extract capture group
+        let cap = extract_capture(
+            captures,
+            i,
+            normalized_names,
+            spec,
+            actual_capture_index,
+            group_offset,
+        );
+        
+        // Increment actual_capture_index for the next field (both named and unnamed groups consume an index)
+        // But only increment if we actually used a positional group (not a named group)
+        if normalized_names.get(i).and_then(|n| n.as_ref()).is_none() {
+            actual_capture_index += 1;
+        } else {
+            // Named groups still consume an index in the regex, so increment
+            actual_capture_index += 1;
+        }
+        
+        if let Some(cap) = cap {
+            let value_str = cap.as_str();
+            let field_start = cap.start();
+            let field_end = cap.end();
+            
+            // Store raw capture for Match object (only if needed)
+            if !evaluate_result {
+                captures_vec.push(Some(value_str.to_string()));
+                if let Some(norm_name) = normalized_names.get(i).and_then(|n| n.as_ref()) {
+                    named_captures.insert(norm_name.clone(), value_str.to_string());
+                }
+            }
+            
+            if evaluate_result {
+                let converted = spec.convert_value(value_str, py, &custom_converters)?;
+
+                // Use original field name (with hyphens/dots) for the result
+                if let Some(ref original_name) = field_names[i] {
+                    // Check if this is a dict-style field name (contains [])
+                    if original_name.contains('[') {
+                        // Parse the path and insert into nested dict structure
+                        let path = crate::parser::pattern::parse_field_path(original_name);
+                        // Check for repeated field names - compare values if path already exists
+                        if let Some(existing_value) = get_nested_dict_value(&named, &path, py)? {
+                            // Compare values using Python's equality (batch GIL operation)
+                            let are_equal: bool = {
+                                let existing_obj = existing_value.to_object(py);
+                                let converted_obj = converted.to_object(py);
+                                existing_obj.bind(py).eq(converted_obj.bind(py)).unwrap_or(false)
+                            };
+                            if !are_equal {
+                                // Values don't match for repeated name
+                                return Ok(None);
+                            }
+                        }
+                        insert_nested_dict(&mut named, &path, converted, py)?;
+                    } else {
+                        // Regular flat field name
+                        // Fast path: most fields are not repeated, so check first
+                        // Use get() directly instead of contains_key + get (one less lookup)
+                        match named.get(original_name) {
+                            Some(existing_value) => {
+                                // Field exists - check if values match (repeated name case)
+                                let are_equal: bool = {
+                                    let existing_obj = existing_value.to_object(py);
+                                    let converted_obj = converted.to_object(py);
+                                    existing_obj.bind(py).eq(converted_obj.bind(py)).unwrap_or(false)
+                                };
+                                if !are_equal {
+                                    // Values don't match for repeated name
+                                    return Ok(None);
+                                }
+                            },
+                            None => {
+                                // New field - insert it
+                                named.insert(original_name.clone(), converted);
+                            }
+                        }
+                    }
+                    
+                    // Store field span (already absolute position in original string)
+                    field_spans.insert(original_name.clone(), (field_start, field_end));
+                } else {
+                    // Positional field
+                    fixed.push(converted);
+                }
+            }
+        }
+        
+        // Increment group offset for alignment patterns (they add an extra group)
+        if spec.alignment.is_some() {
+            group_offset += 1;
+        }
+        // Increment group offset for custom patterns with groups (the groups inside the pattern become part of the overall regex)
+        if pattern_groups > 0 {
+            group_offset += pattern_groups;
+        }
+    }
+
+    // Create result object (positions are already absolute)
+    if evaluate_result {
+        let parse_result = ParseResult::new_with_spans(fixed, named, (start, end), field_spans);
+        Ok(Some(Py::new(py, parse_result)?.to_object(py)))
+    } else {
+        // Create Match object with raw captures
+        // Note: pattern is static, but Match needs owned String - this is acceptable
+        // as Match objects are only created when evaluate_result=False (less common)
+        let match_obj = Match::new(
+            pattern.to_string(),
+            field_specs.to_vec(),
+            field_names.to_vec(),
+            normalized_names.to_vec(),
+            captures_vec,
+            named_captures,
+            (start, end),
+            field_spans,
+        );
+        Ok(Some(Py::new(py, match_obj)?.to_object(py)))
+    }
+}
+
 /// Match a regex against a string and extract results
 pub fn match_with_regex(
     regex: &Regex,
@@ -248,7 +402,7 @@ pub fn match_with_regex(
     field_names: &[Option<String>],
     normalized_names: &[Option<String>],
     py: Python,
-    custom_converters: HashMap<String, PyObject>,
+    custom_converters: &HashMap<String, PyObject>,
     evaluate_result: bool,
 ) -> PyResult<Option<PyObject>> {
     if let Some(captures) = regex.captures(string) {

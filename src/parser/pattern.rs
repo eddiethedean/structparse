@@ -39,7 +39,10 @@ pub fn parse_pattern(
                         // Literal ends with whitespace - replace trailing whitespace with \s+
                         // to allow one or more spaces (ensures we consume at least one space)
                         let trimmed = literal.trim_end();
-                        format!("{}\\s+", regex::escape(trimmed))
+                        let mut escaped_str = String::with_capacity(trimmed.len() + 4);
+                        escaped_str.push_str(&regex::escape(trimmed));
+                        escaped_str.push_str("\\s+");
+                        escaped_str
                     } else {
                         regex::escape(&literal)
                     };
