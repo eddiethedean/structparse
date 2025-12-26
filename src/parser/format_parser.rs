@@ -193,6 +193,14 @@ impl FormatParser {
         self.regex_str.replace(r"\s+", " ").replace(r"\s*", " ")
     }
 
+    /// Get the format object for formatting values into the pattern
+    #[getter]
+    fn format(&self) -> Format {
+        Format {
+            pattern: self.pattern.clone(),
+        }
+    }
+
     /// Search for the pattern in a string
     #[pyo3(signature = (string, case_sensitive=true, extra_types=None, evaluate_result=true))]
     fn search(
