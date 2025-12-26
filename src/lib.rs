@@ -128,8 +128,21 @@ fn search(
     case_sensitive: bool,
     evaluate_result: bool,
 ) -> PyResult<Option<PyObject>> {
-    let parser = get_or_create_parser(pattern, extra_types.clone())?;
+    // Validate pos parameter
+    if pos > string.len() {
+        return Ok(None);
+    }
+    
+    // Validate endpos parameter
     let end = endpos.unwrap_or(string.len());
+    if end > string.len() {
+        return Ok(None);
+    }
+    if end < pos {
+        return Ok(None);
+    }
+    
+    let parser = get_or_create_parser(pattern, extra_types.clone())?;
     let search_string = &string[pos..end];
     
     if let Some(result) = parser.search_pattern(search_string, case_sensitive, extra_types, evaluate_result)? {

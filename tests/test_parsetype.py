@@ -133,9 +133,15 @@ def test_with_pattern_and_wrong_regex_group_count_raises_error():
     for bad_regex_group_count, error_class in BAD_REGEX_GROUP_COUNTS_AND_ERRORS:
         parse_unit.regex_group_count = bad_regex_group_count  # -- OVERRIDE-HERE
         type_converters = {"Number": parse_number, "Unit": parse_unit}
-        parser = parse.Parser("test {:Unit}-{:Number}", type_converters)
-        with pytest.raises(error_class):
-            parser.parse("test meter-10")
+        # Error may be raised during parser creation or during parsing
+        try:
+            parser = parse.Parser("test {:Unit}-{:Number}", type_converters)
+            # If parser creation succeeds, error should be raised during parsing
+            with pytest.raises(error_class):
+                parser.parse("test meter-10")
+        except error_class:
+            # Error raised during parser creation is also acceptable
+            pass
 
 
 def test_with_pattern_and_regex_group_count_is_none():

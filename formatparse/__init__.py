@@ -31,6 +31,21 @@ def parse(pattern: str, string: str, extra_types=None, case_sensitive=False, eva
 
 def search(pattern: str, string: str, pos=0, endpos=None, extra_types=None, case_sensitive=True, evaluate_result=True):
     """Search for a pattern in a string"""
+    # Validate pos parameter - handle negative values
+    if pos < 0:
+        pos = 0
+    if pos > len(string):
+        return None
+    
+    # Validate endpos parameter
+    if endpos is not None:
+        if endpos < 0:
+            endpos = 0
+        if endpos > len(string):
+            endpos = len(string)
+        if endpos < pos:
+            return None
+    
     return _search(pattern, string, pos, endpos, extra_types, case_sensitive, evaluate_result)
 
 def findall(pattern: str, string: str, extra_types=None, case_sensitive=False, evaluate_result=True):
