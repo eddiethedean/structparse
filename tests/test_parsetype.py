@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-import structparse as parse
+import formatparse as parse
 
 
 def assert_match(parser, text, param_name, expected):

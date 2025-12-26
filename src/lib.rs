@@ -1,4 +1,4 @@
-//! structparse-core: A Rust-backed Python library for parsing strings
+//! formatparse-core: A Rust-backed Python library for parsing strings
 //!
 //! This library provides high-performance string parsing using Python format() syntax.
 //! It's organized into several modules:
@@ -271,7 +271,7 @@ fn extract_format(
 
 /// Python module definition
 #[pymodule]
-fn _structparse(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _formatparse(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     m.add_function(wrap_pyfunction!(search, m)?)?;
     m.add_function(wrap_pyfunction!(findall, m)?)?;

@@ -1,4 +1,4 @@
-//! Parser module for structparse
+//! Parser module for formatparse
 //!
 //! This module contains the core parsing logic, organized into sub-modules:
 //! - `pattern`: Parses format strings into field specifications

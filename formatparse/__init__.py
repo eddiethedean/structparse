@@ -7,7 +7,7 @@ This is a Rust-backed implementation of the parse library for better performance
 from typing import Callable
 
 # Import from the Rust extension module
-from _structparse import parse as _parse, search as _search, findall as _findall, compile as _compile, extract_format, ParseResult, FormatParser, FixedTzOffset as _FixedTzOffset, Match
+from _formatparse import parse as _parse, search as _search, findall as _findall, compile as _compile, extract_format, ParseResult, FormatParser, FixedTzOffset as _FixedTzOffset, Match
 
 # Define RepeatedNameError exception (matches original parse library)
 class RepeatedNameError(ValueError):

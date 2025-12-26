@@ -1,15 +1,15 @@
 [package]
-name = "structparse-core"
+name = "formatparse-core"
 version = "0.1.0"
 edition = "2021"
 description = "Parse strings using a specification based on the Python format() syntax (Rust implementation)"
 authors = ["Odos Matthews <odosmatthews@gmail.com>"]
 license = "MIT"
-repository = "https://github.com/eddiethedean/parse-rs"
+repository = "https://github.com/eddiethedean/formatparse"
 readme = "README.md"
 
 [lib]
-name = "_structparse"
+name = "_formatparse"
 crate-type = ["cdylib"]
 
 [dependencies]

@@ -1,7 +1,7 @@
 import pickle
 from datetime import datetime
 
-import structparse as parse
+import formatparse as parse
 
 
 def test_tz_compare_to_None():

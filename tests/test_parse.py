@@ -6,7 +6,7 @@ from datetime import time
 
 import pytest
 
-import structparse as parse
+import formatparse as parse
 
 
 def test_no_match():

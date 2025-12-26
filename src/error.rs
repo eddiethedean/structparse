@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-/// Error types for structparse operations
+/// Error types for formatparse operations
 pub mod errors {
     use super::*;
 

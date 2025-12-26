@@ -1,11 +1,11 @@
-# structparse
+# formatparse
 
 A Rust-backed implementation of the [parse](https://github.com/r1chardj0n3s/parse) library for Python. This library provides the same API as the original `parse` library but with improved performance and reliability thanks to Rust.
 
 ## Installation
 
 ```bash
-pip install structparse
+pip install formatparse
 ```
 
 Or build from source:
@@ -20,7 +20,7 @@ maturin develop
 Parse strings using a specification based on the Python `format()` syntax:
 
 ```python
-from structparse import parse
+from formatparse import parse
 
 result = parse("Hello, {}!", "Hello, World!")
 print(result.fixed)  # ['World!']
@@ -32,7 +32,7 @@ print(result.named)  # {'name': 'Alice', 'age': 30}
 ### Basic Parsing
 
 ```python
-from structparse import parse
+from formatparse import parse
 
 # Named fields
 result = parse("{name} is {age:d} years old", "Alice is 30 years old")
@@ -51,7 +51,7 @@ print(result.named['value'])  # 3.14
 ### Searching
 
 ```python
-from structparse import search
+from formatparse import search
 
 result = search("age: {age:d}", "Name: Alice, age: 30, City: NYC")
 if result:
@@ -61,7 +61,7 @@ if result:
 ### Finding All Matches
 
 ```python
-from structparse import findall
+from formatparse import findall
 
 results = findall("{word}", "hello world python")
 for result in results:
@@ -74,7 +74,7 @@ for result in results:
 ### Custom Types
 
 ```python
-from structparse import parse, with_pattern
+from formatparse import parse, with_pattern
 
 @with_pattern(r'\d+')
 def parse_number(text):

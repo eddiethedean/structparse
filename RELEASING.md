@@ -1,6 +1,6 @@
 # Releasing to PyPI
 
-This document explains how to release a new version of `structparse` to PyPI.
+This document explains how to release a new version of `formatparse` to PyPI.
 
 ## Quick Release
 

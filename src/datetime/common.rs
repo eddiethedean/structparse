@@ -25,7 +25,7 @@ pub fn get_abbreviated_month_map() -> HashMap<&'static str, u8> {
 
 /// Create a FixedTzOffset from offset minutes
 pub fn create_fixed_tz(py: Python, offset_minutes: i32, name: &str) -> PyResult<PyObject> {
-    let fixed_tz_module = py.import_bound("structparse")?;
+    let fixed_tz_module = py.import_bound("formatparse")?;
     let fixed_tz_class = fixed_tz_module.getattr("FixedTzOffset")?;
     let tz = fixed_tz_class.call1((offset_minutes, name.to_string(),))?;
     Ok(tz.to_object(py))

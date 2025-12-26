@@ -1,4 +1,4 @@
-//! Datetime parsing module for structparse
+//! Datetime parsing module for formatparse
 //!
 //! This module provides datetime parsing for various formats:
 //! - `common`: Shared utilities for datetime parsing

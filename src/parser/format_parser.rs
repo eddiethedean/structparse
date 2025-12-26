@@ -5,7 +5,7 @@ use pyo3::types::{PyString, PyTuple};
 use regex::Regex;
 use std::collections::HashMap;
 
-#[pyclass(module = "_structparse")]
+#[pyclass(module = "_formatparse")]
 #[derive(Clone)]
 pub struct FormatParser {
     #[pyo3(get)]

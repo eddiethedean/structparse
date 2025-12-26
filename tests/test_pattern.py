@@ -1,6 +1,6 @@
 import pytest
 
-import structparse as parse
+import formatparse as parse
 
 
 def _test_expression(format, expression):

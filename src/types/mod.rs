@@ -1,4 +1,4 @@
-//! Type system module for structparse
+//! Type system module for formatparse
 //!
 //! This module defines the type system used for parsing:
 //! - `definitions`: Core type definitions (FieldType, FieldSpec)

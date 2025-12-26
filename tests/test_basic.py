@@ -1,7 +1,7 @@
-"""Basic tests for structparse"""
+"""Basic tests for formatparse"""
 
 import pytest
-from structparse import parse, search, findall, ParseResult
+from formatparse import parse, search, findall, ParseResult
 
 
 def test_simple_string():

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Release script for structparse
+# Release script for formatparse
 # Usage: ./scripts/release.sh <version>
 # Example: ./scripts/release.sh 0.1.0
 
@@ -72,7 +72,7 @@ echo "   - Build wheels for all platforms and Python versions"
 echo "   - Publish to PyPI"
 echo ""
 echo "📋 Optional: Create a GitHub release for better visibility:"
-echo "   1. Go to https://github.com/eddiethedean/structparse/releases/new"
+echo "   1. Go to https://github.com/eddiethedean/formatparse/releases/new"
 echo "   2. Select tag ${TAG}"
 echo "   3. Fill in release title and notes"
 echo "   4. Click 'Publish release'"
