@@ -24,6 +24,8 @@ pub struct FormatParser {
     name_mapping: std::collections::HashMap<String, String>,  // Map normalized -> original
     stored_extra_types: Option<HashMap<String, PyObject>>,  // Store extra_types for use during conversion
     pub(crate) custom_type_groups: Vec<usize>,  // Cached pattern_groups per field (for custom types)
+    pub(crate) field_count: usize,  // Cached field count for fast path optimizations
+    pub(crate) has_nested_dict_fields: Vec<bool>,  // Cached flags: does field name contain '[' (nested dict)?
 }
 
 impl FormatParser {
@@ -69,6 +71,12 @@ impl FormatParser {
             Ok(groups)
         })?;
         
+        // Pre-compute which fields have nested dict names (contain '[')
+        // This avoids checking original_name.contains('[') in the hot path
+        let has_nested_dict_fields: Vec<bool> = field_names.iter()
+            .map(|name_opt| name_opt.as_ref().map(|n| n.contains('[')).unwrap_or(false))
+            .collect();
+        
         // Build regex with DOTALL flag
         let regex = crate::parser::regex::build_regex(&regex_str_with_anchors)?;
 
@@ -86,12 +94,14 @@ impl FormatParser {
             regex_case_insensitive,
             search_regex,
             search_regex_case_insensitive,
-            field_specs,
+            field_specs: field_specs.clone(),
             field_names,
             normalized_names,
             name_mapping,
             stored_extra_types: extra_types,
             custom_type_groups,
+            field_count: field_specs.len(),  // Cache field count for fast path
+            has_nested_dict_fields,  // Cache nested dict flags
         })
     }
 

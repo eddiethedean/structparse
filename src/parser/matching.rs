@@ -2,6 +2,7 @@ use crate::error;
 use crate::result::ParseResult;
 use crate::types::FieldSpec;
 use crate::match_rs::Match;
+use crate::parser::raw_match::{RawMatchData, RawValue};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use regex::{Regex, Captures};
@@ -239,6 +240,107 @@ pub fn validate_custom_type_pattern(
     Ok(pattern_groups)
 }
 
+/// Match using existing captures and return raw data (no Python objects)
+/// This is used for batch processing to defer Python object creation
+/// Returns None if custom converters are needed (they require Python)
+pub fn match_with_captures_raw(
+    captures: &Captures,
+    _string: &str,
+    _match_start: usize,
+    field_specs: &[FieldSpec],
+    field_names: &[Option<String>],
+    normalized_names: &[Option<String>],
+    custom_type_groups: &[usize],
+    has_nested_dict_fields: &[bool],
+) -> Result<Option<RawMatchData>, String> {
+    let full_match = captures.get(0).unwrap();
+    let start = full_match.start();
+    let end = full_match.end();
+    
+    let field_count = field_specs.len();
+    let mut raw_data = RawMatchData::with_capacity(field_count);
+    raw_data.span = (start, end);
+    
+    let mut group_offset = 0;
+    let mut actual_capture_index = 1;
+    
+    for (i, spec) in field_specs.iter().enumerate() {
+        let pattern_groups = custom_type_groups.get(i).copied().unwrap_or(0);
+        
+        let cap = extract_capture(
+            captures,
+            i,
+            normalized_names,
+            spec,
+            actual_capture_index,
+            group_offset,
+        );
+        
+        if normalized_names.get(i).and_then(|n| n.as_ref()).is_none() {
+            actual_capture_index += 1;
+        } else {
+            actual_capture_index += 1;
+        }
+        
+        if let Some(cap) = cap {
+            let value_str = cap.as_str();
+            let field_start = cap.start();
+            let field_end = cap.end();
+            
+            // Try to convert to raw value (fails for custom types and datetime)
+            match spec.convert_value_raw(value_str) {
+                Ok(raw_value) => {
+                    if let Some(ref original_name) = field_names[i] {
+                        // Check for repeated field names
+                        if has_nested_dict_fields.get(i).copied().unwrap_or(false) {
+                            // Nested dict fields require Python conversion (complex dict structure)
+                            return Err("Nested dict fields require Python conversion".to_string());
+                        } else {
+                            // Regular flat field name
+                            if let Some(existing) = raw_data.named.get(original_name) {
+                                // Check if values match (for repeated names)
+                                if !values_equal(existing, &raw_value) {
+                                    return Ok(None);  // Values don't match
+                                }
+                            } else {
+                                raw_data.named.insert(original_name.clone(), raw_value);
+                            }
+                        }
+                        raw_data.field_spans.insert(original_name.clone(), (field_start, field_end));
+                    } else {
+                        raw_data.fixed.push(raw_value);
+                    }
+                }
+                Err(_) => {
+                    // Type requires Python conversion (custom or datetime)
+                    return Err("Type requires Python conversion".to_string());
+                }
+            }
+        }
+        
+        if spec.alignment.is_some() {
+            group_offset += 1;
+        }
+        if pattern_groups > 0 {
+            group_offset += pattern_groups;
+        }
+    }
+    
+    Ok(Some(raw_data))
+}
+
+/// Compare two RawValues for equality
+fn values_equal(a: &RawValue, b: &RawValue) -> bool {
+    match (a, b) {
+        (RawValue::String(s1), RawValue::String(s2)) => s1 == s2,
+        (RawValue::Integer(n1), RawValue::Integer(n2)) => n1 == n2,
+        (RawValue::Float(f1), RawValue::Float(f2)) => (f1 - f2).abs() < f64::EPSILON,
+        (RawValue::Boolean(b1), RawValue::Boolean(b2)) => b1 == b2,
+        (RawValue::None, RawValue::None) => true,
+        _ => false,
+    }
+}
+
 /// Match using existing captures (optimized for findall)
 /// Note: captures are from the full string, so positions are already absolute
 pub fn match_with_captures(
@@ -250,6 +352,7 @@ pub fn match_with_captures(
     field_names: &[Option<String>],
     normalized_names: &[Option<String>],
     custom_type_groups: &[usize],  // Pre-computed pattern_groups per field
+    has_nested_dict_fields: &[bool],  // Pre-computed flags: does field name contain '['?
     py: Python,
     custom_converters: &HashMap<String, PyObject>,
     evaluate_result: bool,
@@ -260,9 +363,10 @@ pub fn match_with_captures(
     
     // Pre-allocate with capacity based on expected field count
     let field_count = field_specs.len();
+    // Fast path: for single-field patterns, use optimized allocation
     let mut fixed = Vec::with_capacity(field_count);
-    let mut named: HashMap<String, PyObject> = HashMap::with_capacity(field_count);
-    let mut field_spans: HashMap<String, (usize, usize)> = HashMap::with_capacity(field_count);
+    let mut named: HashMap<String, PyObject> = HashMap::with_capacity(field_count.max(1));
+    let mut field_spans: HashMap<String, (usize, usize)> = HashMap::with_capacity(field_count.max(1));
     let mut captures_vec = Vec::with_capacity(field_count);  // For Match object when evaluate_result=False
     let mut named_captures = HashMap::with_capacity(field_count);  // For Match object when evaluate_result=False
     let mut group_offset = 0;
@@ -298,20 +402,22 @@ pub fn match_with_captures(
             let field_end = cap.end();
             
             // Store raw capture for Match object (only if needed)
+            // Only allocate strings when evaluate_result=False (Match objects need owned strings)
             if !evaluate_result {
                 captures_vec.push(Some(value_str.to_string()));
                 if let Some(norm_name) = normalized_names.get(i).and_then(|n| n.as_ref()) {
                     named_captures.insert(norm_name.clone(), value_str.to_string());
                 }
             }
+            // For evaluate_result=True, we don't need to store raw captures, saving allocations
             
             if evaluate_result {
                 let converted = spec.convert_value(value_str, py, &custom_converters)?;
 
                 // Use original field name (with hyphens/dots) for the result
                 if let Some(ref original_name) = field_names[i] {
-                    // Check if this is a dict-style field name (contains [])
-                    if original_name.contains('[') {
+                    // Use pre-computed flag to avoid contains('[') check in hot path
+                    if has_nested_dict_fields.get(i).copied().unwrap_or(false) {
                         // Parse the path and insert into nested dict structure
                         let path = crate::parser::pattern::parse_field_path(original_name);
                         // Check for repeated field names - compare values if path already exists
@@ -374,6 +480,7 @@ pub fn match_with_captures(
     // Create result object (positions are already absolute)
     if evaluate_result {
         let parse_result = ParseResult::new_with_spans(fixed, named, (start, end), field_spans);
+        // Py::new() is already optimized when GIL is held
         Ok(Some(Py::new(py, parse_result)?.to_object(py)))
     } else {
         // Create Match object with raw captures
@@ -548,6 +655,7 @@ pub fn match_with_regex(
 
         if evaluate_result {
             let parse_result = ParseResult::new_with_spans(fixed, named, (start, end), field_spans);
+            // Py::new() is already optimized when GIL is held
             Ok(Some(Py::new(py, parse_result)?.to_object(py)))
         } else {
             // Create Match object with raw captures
@@ -562,6 +670,7 @@ pub fn match_with_regex(
                 field_spans,
             );
             // Use Py::new_bound for better performance
+            // Py::new() is already optimized when GIL is held
             Ok(Some(Py::new(py, match_obj)?.to_object(py)))
         }
     } else {

@@ -11,7 +11,7 @@
 //! - `match_rs`: Match struct for raw regex captures
 
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
@@ -24,12 +24,14 @@ mod datetime;
 mod error;
 mod parser;
 mod result;
+mod results;
 mod types;
 mod match_rs;
 
 pub use datetime::FixedTzOffset;
 pub use parser::{FormatParser, Format};
 pub use result::*;
+pub use results::Results;
 pub use types::*;
 pub use match_rs::Match;
 
@@ -136,6 +138,7 @@ fn search(
             if let Ok(parse_result) = result.bind(py).downcast::<ParseResult>() {
                 let result_value = parse_result.borrow();
                 let adjusted = result_value.clone().with_offset(pos);
+                // Py::new() is already optimized when GIL is held
                 Ok(Some(Py::new(py, adjusted)?.to_object(py)))
             } else {
                 // It's a Match object - we need to adjust its span
@@ -157,38 +160,79 @@ fn findall(
     extra_types: Option<HashMap<String, PyObject>>,
     case_sensitive: bool,
     evaluate_result: bool,
-) -> PyResult<Vec<PyObject>> {
+) -> PyResult<PyObject> {
     let parser = get_or_create_parser(pattern, extra_types.clone())?;
     
-    // Use single GIL acquisition for entire operation
-    Python::with_gil(|py| -> PyResult<Vec<PyObject>> {
-        // Get the search regex from the parser
+    // Fast path: if no custom converters and evaluate_result=True, use raw matching
+    // This defers all Python object creation until the end (batch conversion)
+    // CRITICAL: Do ALL regex matching OUTSIDE GIL, then batch convert inside GIL
+    let has_custom_converters = extra_types.as_ref().map(|et| !et.is_empty()).unwrap_or(false);
+    let has_nested_dicts = parser.has_nested_dict_fields.iter().any(|&b| b);
+    
+    if !has_custom_converters && evaluate_result && !has_nested_dicts {
+        // Use raw matching path: collect all raw data first (NO GIL), then batch convert
+        let mut raw_results = Vec::new();
         let search_regex = parser.get_search_regex(case_sensitive);
-        
-        // Pre-allocate results vector with reasonable default capacity
-        // This reduces reallocations for common cases (1-10 matches)
-        let mut results = Vec::with_capacity(10);
         let mut last_end = 0;
         
-        // Pre-clone extra_types once if it exists, or create empty HashMap for reference
-        // This avoids cloning on every iteration
-        let extra_types_for_matching = extra_types.as_ref().map(|et| et.clone()).unwrap_or_default();
-        
-        // Use captures_iter to get all matches with their capture groups efficiently
+        // Collect all raw matches OUTSIDE GIL (no Python objects created yet)
+        // This is the key optimization: all CPU work happens without GIL
         for captures in search_regex.captures_iter(string) {
             let full_match = captures.get(0).unwrap();
             let match_start = full_match.start();
             let match_end = full_match.end();
             
-            // Skip overlapping matches (start before previous match ended)
             if match_start < last_end {
                 continue;
             }
             
-            // Pass reference to extra_types (no cloning needed)
+            // Try raw matching (no Python objects, no GIL needed)
+            if let Ok(Some(raw_data)) = crate::parser::matching::match_with_captures_raw(
+                &captures,
+                string,
+                match_start,
+                &parser.field_specs,
+                &parser.field_names,
+                &parser.normalized_names,
+                &parser.custom_type_groups,
+                &parser.has_nested_dict_fields,
+            ) {
+                raw_results.push(raw_data);
+                last_end = match_end;
+                
+                if match_start == match_end {
+                    last_end += 1;
+                }
+            }
+        }
+        
+        // Return Results object with raw data (lazy conversion)
+        // This avoids creating all ParseResult objects upfront
+        return Python::with_gil(|py| -> PyResult<PyObject> {
+            let results = Results::new(raw_results);
+            Ok(Py::new(py, results)?.to_object(py))
+        });
+    }
+    
+    // Fallback: use Python path (for custom converters or evaluate_result=False)
+    // Optimized: Collect results first, then create PyList with items directly
+    Python::with_gil(|py| -> PyResult<PyObject> {
+        let search_regex = parser.get_search_regex(case_sensitive);
+        let mut results = Vec::new();
+        let mut last_end = 0;
+        let extra_types_for_matching = extra_types.as_ref().map(|et| et.clone()).unwrap_or_default();
+        
+        for captures in search_regex.captures_iter(string) {
+            let full_match = captures.get(0).unwrap();
+            let match_start = full_match.start();
+            let match_end = full_match.end();
+            
+            if match_start < last_end {
+                continue;
+            }
+            
             let extra_types_ref = &extra_types_for_matching;
             
-            // Process the match using captures directly (optimized - no re-matching, no cloning, no validation)
             if let Some(result) = crate::parser::matching::match_with_captures(
                 &captures,
                 string,
@@ -198,22 +242,27 @@ fn findall(
                 &parser.field_names,
                 &parser.normalized_names,
                 &parser.custom_type_groups,
+                &parser.has_nested_dict_fields,
                 py,
                 extra_types_ref,
                 evaluate_result,
             )? {
-                // Result already has correct absolute positions, no adjustment needed
                 results.push(result);
                 last_end = match_end;
                 
-                // Avoid infinite loop if match was empty
                 if match_start == match_end {
                     last_end += 1;
                 }
             }
         }
         
-        Ok(results)
+        // Create PyList with items directly (more efficient than empty + append)
+        // Convert PyObject to Bound<PyAny> for PyList::new_bound
+        let items: Vec<_> = results.iter()
+            .map(|obj| obj.bind(py))
+            .collect();
+        let results_list = PyList::new_bound(py, items);
+        Ok(results_list.to_object(py))
     })
 }
 
@@ -351,6 +400,7 @@ fn _formatparse(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Format>()?;
     m.add_class::<FixedTzOffset>()?;
     m.add_class::<Match>()?;
+    m.add_class::<Results>()?;
     Ok(())
 }
 

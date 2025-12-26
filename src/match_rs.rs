@@ -64,6 +64,7 @@ impl Match {
         }
         
         let parse_result = ParseResult::new_with_spans(fixed, named, self.span, self.field_spans.clone());
+        // Py::new() is already optimized when GIL is held
         Ok(Py::new(py, parse_result)?.to_object(py))
     }
 }

@@ -10,6 +10,7 @@ pub mod pattern;
 pub mod regex;
 pub mod matching;
 pub mod format_parser;
+pub mod raw_match;
 
 pub use format_parser::{FormatParser, Format};
 pub use pattern::parse_field_path;
