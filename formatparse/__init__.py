@@ -442,14 +442,14 @@ class BidirectionalResult:
         }
 
     @property
-    def named(self) -> dict:
+    def named(self) -> dict[str, Any]:
         """Mutable named fields dictionary"""
-        return self._values["named"]
-
+        return self._values["named"]  # type: ignore[return-value]
+    
     @property
-    def fixed(self) -> list:
+    def fixed(self) -> list[Any]:
         """Mutable fixed (positional) fields list"""
-        return self._values["fixed"]
+        return self._values["fixed"]  # type: ignore[return-value]
 
     def format(self) -> str:
         """
