@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Mock the _formatparse module if it's not available (for ReadTheDocs builds)
+# This must happen before formatparse/__init__.py tries to import it
 try:
     import _formatparse
 except ImportError:
@@ -23,11 +24,16 @@ except ImportError:
     _formatparse.search = MagicMock(name='search')
     _formatparse.findall = MagicMock(name='findall')
     _formatparse.compile = MagicMock(name='compile')
+    
+    # Mock classes that are imported
     _formatparse.ParseResult = MagicMock(name='ParseResult')
     _formatparse.FormatParser = MagicMock(name='FormatParser')
     _formatparse.FixedTzOffset = MagicMock(name='FixedTzOffset')
     
     sys.modules['_formatparse'] = _formatparse
+
+# Also mock formatparse module itself to handle import errors gracefully
+autodoc_mock_imports = ['_formatparse']
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
