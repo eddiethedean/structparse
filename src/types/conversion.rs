@@ -7,12 +7,22 @@ use std::collections::HashMap;
 impl FieldSpec {
     /// Validate alignment+precision constraints for string fields
     /// Returns false if validation fails (should reject the match)
+    /// 
+    /// This validates the constraints described in issue #3 (parse#218):
+    /// - Fill characters should only be in correct positions (left for right-align, right for left-align)
+    /// - Total width (including fill chars) should not exceed specified width when width is specified
+    /// - Content length (after removing fill chars) should not exceed precision
     pub fn validate_alignment_precision(&self, value: &str) -> bool {
         if let FieldType::String = &self.field_type {
             if let (Some(prec), Some(align)) = (self.precision, self.alignment) {
                 let fill_ch = self.fill.unwrap_or(' ');
                 let has_leading_fill = value.starts_with(fill_ch);
                 let has_trailing_fill = value.ends_with(fill_ch);
+                
+                // Count leading and trailing fill characters
+                let leading_count = value.chars().take_while(|&c| c == fill_ch).count();
+                let trailing_count = value.chars().rev().take_while(|&c| c == fill_ch).count();
+                let content_len = value.len() - leading_count - trailing_count;
                 
                 match align {
                     '>' => {
@@ -22,39 +32,68 @@ impl FieldSpec {
                             return false;
                         }
                         // Reject if fill char on right (should only be on left)
-                        if has_trailing_fill && value.len() > prec {
+                        if has_trailing_fill {
                             return false;
                         }
-                        // Reject if fill on left enables extra content beyond precision
-                        if has_leading_fill && value.len() > prec {
-                            let leading_count = value.chars().take_while(|&c| c == fill_ch).count();
-                            let content_len = value.len() - leading_count;
-                            if content_len > prec {
+                        // Reject if content exceeds precision
+                        if content_len > prec {
+                            return false;
+                        }
+                        // Reject if width is specified and total width exceeds it
+                        // When width is specified with precision, total should not exceed width
+                        if let Some(width) = self.width {
+                            if value.len() > width {
                                 return false;
+                            }
+                        } else {
+                            // No width specified, but precision is: reject if fill enables extra content
+                            if has_leading_fill && value.len() > prec {
+                                let leading_count = value.chars().take_while(|&c| c == fill_ch).count();
+                                let content_len = value.len() - leading_count;
+                                if content_len > prec {
+                                    return false;
+                                }
                             }
                         }
                     },
                     '<' => {
                         // Left-aligned: fill chars should only be on the right
-                        // Reject if fill char on left AND value exceeds precision
-                        if has_leading_fill && value.len() > prec {
+                        // Reject if fill char on left (should only be on right)
+                        if has_leading_fill {
                             return false;
                         }
-                        // Reject if fill on right enables extra content beyond precision
-                        if has_trailing_fill && value.len() > prec {
-                            let trailing_count = value.chars().rev().take_while(|&c| c == fill_ch).count();
-                            let content_len = value.len() - trailing_count;
-                            if content_len > prec {
+                        // Reject if content exceeds precision
+                        if content_len > prec {
+                            return false;
+                        }
+                        // Reject if width is specified and total width exceeds it
+                        if let Some(width) = self.width {
+                            if value.len() > width {
                                 return false;
+                            }
+                        } else {
+                            // No width specified, but precision is: reject if fill enables extra content
+                            if has_trailing_fill && value.len() > prec {
+                                let trailing_count = value.chars().rev().take_while(|&c| c == fill_ch).count();
+                                let content_len = value.len() - trailing_count;
+                                if content_len > prec {
+                                    return false;
+                                }
                             }
                         }
                     },
                     '^' => {
-                        // Center-aligned: reject if too many fill chars enable extra content
-                        if (has_leading_fill || has_trailing_fill) && value.len() > prec {
-                            let leading_count = value.chars().take_while(|&c| c == fill_ch).count();
-                            let trailing_count = value.chars().rev().take_while(|&c| c == fill_ch).count();
-                            let content_len = value.len() - leading_count - trailing_count;
+                        // Center-aligned: reject if content exceeds precision
+                        if content_len > prec {
+                            return false;
+                        }
+                        // Reject if width is specified and total width exceeds it
+                        if let Some(width) = self.width {
+                            if value.len() > width {
+                                return false;
+                            }
+                        } else {
+                            // No width specified, but precision is: reject if content exceeds precision
                             if content_len > prec {
                                 return false;
                             }
