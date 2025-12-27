@@ -311,7 +311,21 @@ class BidirectionalPattern:
         Returns:
             Formatted string
         """
-        return self._parser.format.format(values)
+        # Format.format() expects args or kwargs, not a dict directly
+        # For named fields, we need to unpack the dict as kwargs
+        if isinstance(values, dict):
+            # Use Python's format() method directly with **kwargs
+            return self._pattern.format(**values)
+        elif isinstance(values, tuple):
+            return self._pattern.format(*values)
+        elif isinstance(values, ParseResult):
+            # Convert ParseResult to dict or tuple
+            if values.named:
+                return self._pattern.format(**dict(values.named))
+            else:
+                return self._pattern.format(*values.fixed)
+        else:
+            return self._pattern.format(values)
     
     def validate(self, values: Union[dict, tuple, ParseResult]) -> tuple[bool, list[str]]:
         """
