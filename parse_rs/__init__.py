@@ -78,9 +78,6 @@ def findall(
 
 
 # Create a tzinfo-compatible wrapper for FixedTzOffset
-from datetime import tzinfo, timedelta
-
-
 class FixedTzOffset(tzinfo):
     """Fixed timezone offset compatible with datetime.tzinfo"""
 
