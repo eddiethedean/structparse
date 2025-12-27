@@ -12,7 +12,7 @@ This benchmark focuses on scenarios where our optimizations shine:
 
 import time
 import statistics
-from parse import parse as parse_original
+from parse import parse as parse_original  # type: ignore[import-untyped]
 from formatparse import (
     parse as parse_formatparse,
     search as search_formatparse,

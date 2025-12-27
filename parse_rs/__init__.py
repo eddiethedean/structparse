@@ -8,7 +8,7 @@ from datetime import timedelta, tzinfo
 from typing import Callable
 
 # Import from the Rust extension module
-from _parse_rs import (  # type: ignore[import-untyped]
+from _parse_rs import (  # type: ignore[import-not-found]
     parse as _parse,
     search as _search,
     findall as _findall,

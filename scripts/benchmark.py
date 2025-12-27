@@ -5,7 +5,7 @@ Benchmark script to compare formatparse vs parse library performance.
 
 import time
 import statistics
-from parse import parse as parse_original
+from parse import parse as parse_original  # type: ignore[import-untyped]
 from formatparse import parse as parse_formatparse
 
 # Test cases
