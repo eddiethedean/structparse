@@ -8,7 +8,15 @@
 
 A high-performance, Rust-backed implementation of the [parse](https://github.com/r1chardj0n3s/parse) library for Python. `formatparse` provides the same API as the original `parse` library but with **significant performance improvements** (up to **80x faster**) thanks to Rust's zero-cost abstractions and optimized regex engine.
 
-📖 **Documentation**: [https://formatparse.readthedocs.io/](https://formatparse.readthedocs.io/)
+## 📖 Documentation
+
+**Full documentation is available at [https://formatparse.readthedocs.io/](https://formatparse.readthedocs.io/)**
+
+The documentation includes:
+- **Getting Started Guide** - Quick introduction and basic usage
+- **User Guides** - Comprehensive guides on patterns, datetime parsing, custom types, and bidirectional patterns
+- **API Reference** - Complete API documentation for all functions and classes
+- **Examples & Cookbook** - Practical examples and common use cases
 
 ## Features
 
@@ -206,12 +214,6 @@ result = parse("{person[name]}: {person[age]:d}", "Alice: 30")
 print(result.named['person']['name'])  # 'Alice'
 print(result.named['person']['age'])   # 30
 ```
-
-## Documentation
-
-For complete documentation, including API reference, user guides, and examples, see:
-
-**📖 [Read the Docs](https://formatparse.readthedocs.io/)**
 
 ## Quick API Reference
 ```python
