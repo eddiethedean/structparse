@@ -80,8 +80,17 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "formatparse-core"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
+ "once_cell",
+ "regex",
+]
+
+[[package]]
+name = "formatparse-pyo3"
+version = "0.4.2"
+dependencies = [
+ "formatparse-core",
  "lru",
  "once_cell",
  "pyo3",

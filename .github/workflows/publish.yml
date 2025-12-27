@@ -40,7 +40,7 @@ jobs:
       - name: Build wheel
         env:
           PYO3_USE_ABI3_FORWARD_COMPATIBILITY: ${{ matrix.python == '3.13' && '1' || '' }}
-        run: maturin build --out dist --strip --release
+        run: maturin build --manifest-path formatparse-pyo3/Cargo.toml --out dist --strip --release
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
@@ -71,7 +71,7 @@ jobs:
           pip install maturin
 
       - name: Build sdist
-        run: maturin sdist --out dist
+        run: maturin sdist --manifest-path formatparse-pyo3/Cargo.toml --out dist
 
       - name: Upload sdist artifact
         uses: actions/upload-artifact@v4

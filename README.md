@@ -4,8 +4,11 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![Documentation](https://readthedocs.org/projects/formatparse/badge/?version=latest)](https://formatparse.readthedocs.io/)
 
 A high-performance, Rust-backed implementation of the [parse](https://github.com/r1chardj0n3s/parse) library for Python. `formatparse` provides the same API as the original `parse` library but with **significant performance improvements** (up to **80x faster**) thanks to Rust's zero-cost abstractions and optimized regex engine.
+
+📖 **Documentation**: [https://formatparse.readthedocs.io/](https://formatparse.readthedocs.io/)
 
 ## Features
 
@@ -36,7 +39,7 @@ cd formatparse
 pip install maturin
 
 # Build and install in development mode
-maturin develop --release
+maturin develop --manifest-path formatparse-pyo3/Cargo.toml --release
 ```
 
 ## Quick Start
@@ -204,99 +207,13 @@ print(result.named['person']['name'])  # 'Alice'
 print(result.named['person']['age'])   # 30
 ```
 
-## API Reference
+## Documentation
 
-### Core Functions
+For complete documentation, including API reference, user guides, and examples, see:
 
-#### `parse(pattern, string, extra_types=None, case_sensitive=False, evaluate_result=True)`
+**📖 [Read the Docs](https://formatparse.readthedocs.io/)**
 
-Parse a string using a format specification.
-
-**Parameters:**
-- `pattern` (str): Format specification pattern (e.g., `"{name}: {age:d}"`)
-- `string` (str): String to parse
-- `extra_types` (dict, optional): Dictionary of custom type converters
-- `case_sensitive` (bool, optional): Whether matching should be case sensitive (default: `False`)
-- `evaluate_result` (bool, optional): Whether to evaluate the result immediately (default: `True`)
-
-**Returns:** `ParseResult` if match found, `None` otherwise
-
-**Example:**
-```python
-result = parse("{name}: {age:d}", "Alice: 30")
-if result:
-    print(result.named['name'], result.named['age'])
-```
-
-#### `search(pattern, string, pos=0, endpos=None, extra_types=None, case_sensitive=True, evaluate_result=True)`
-
-Search for a pattern in a string.
-
-**Parameters:**
-- `pattern` (str): Format specification pattern
-- `string` (str): String to search
-- `pos` (int, optional): Start position (default: 0)
-- `endpos` (int, optional): End position (default: `None` for end of string)
-- `extra_types` (dict, optional): Dictionary of custom type converters
-- `case_sensitive` (bool, optional): Whether matching should be case sensitive (default: `True`)
-- `evaluate_result` (bool, optional): Whether to evaluate the result immediately (default: `True`)
-
-**Returns:** `ParseResult` if match found, `None` otherwise
-
-**Example:**
-```python
-result = search("age: {age:d}", "Name: Alice, age: 30")
-if result:
-    print(result.named['age'])
-```
-
-#### `findall(pattern, string, extra_types=None, case_sensitive=False, evaluate_result=True)`
-
-Find all matches of a pattern in a string.
-
-**Parameters:**
-- `pattern` (str): Format specification pattern
-- `string` (str): String to search
-- `extra_types` (dict, optional): Dictionary of custom type converters
-- `case_sensitive` (bool, optional): Whether matching should be case sensitive (default: `False`)
-- `evaluate_result` (bool, optional): Whether to evaluate the result immediately (default: `True`)
-
-**Returns:** `Results` object (list-like) containing `ParseResult` objects
-
-**Example:**
-```python
-results = findall("ID:{id:d}", "ID:1 ID:2 ID:3")
-for result in results:
-    print(result.named['id'])
-```
-
-#### `compile(pattern)`
-
-Compile a pattern into a `FormatParser` for repeated use.
-
-**Parameters:**
-- `pattern` (str): Format specification pattern
-
-**Returns:** `FormatParser` object
-
-**Example:**
-```python
-parser = compile("{name}: {age:d}")
-result1 = parser.parse("Alice: 30")
-result2 = parser.parse("Bob: 25")
-```
-
-#### `with_pattern(pattern, regex_group_count=0)`
-
-Decorator to create a custom type converter with a regex pattern.
-
-**Parameters:**
-- `pattern` (str): The regex pattern to match
-- `regex_group_count` (int, optional): Number of regex groups in the pattern (for parentheses)
-
-**Returns:** Decorator function
-
-**Example:**
+## Quick API Reference
 ```python
 @with_pattern(r'\d+')
 def parse_number(text):
@@ -412,55 +329,11 @@ These benchmarks highlight scenarios where Rust optimizations provide the most b
 - **Reference-based Matching**: Eliminated HashMap cloning in hot paths for better performance
 - **Lazy Results Conversion**: Custom `Results` object stores raw data and converts to Python objects only when accessed, with batch conversion on first iteration. This makes `findall` **2.88x faster** than the original library, including both the call and iteration overhead
 
-### Running Benchmarks
-
-```bash
-# Standard comparison benchmarks
-python scripts/benchmark.py
-
-# Optimization-focused benchmarks
-python scripts/benchmark_optimizations.py
-```
-
-## Compatibility
-
-This library aims to be a **drop-in replacement** for the original `parse` library. The core functionality and API are compatible, but there may be subtle differences in edge cases.
-
-### Known Differences
-
-- Default `case_sensitive` parameter: `formatparse` uses `False` for `parse()` and `findall()` (matching original behavior), but `True` for `search()` (for consistency)
-- Some edge cases in pattern matching may behave slightly differently due to Rust's regex engine
+For more information, see the full documentation at [https://formatparse.readthedocs.io/](https://formatparse.readthedocs.io/).
 
 ## Development
 
-### Prerequisites
-
-- Python 3.8+
-- Rust 1.70+
-- maturin (for building)
-
-### Building
-
-```bash
-# Install dependencies
-pip install maturin
-
-# Build in development mode
-maturin develop
-
-# Build in release mode (optimized)
-maturin develop --release
-```
-
-### Testing
-
-```bash
-# Run tests (requires pytest)
-pytest tests/
-
-# Or run tests manually
-python -m pytest tests/ -v
-```
+See the [documentation](https://formatparse.readthedocs.io/) for development setup and contribution guidelines.
 
 ## Contributing
 
