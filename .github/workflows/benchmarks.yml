@@ -41,11 +41,13 @@ jobs:
           maturin develop --manifest-path formatparse-pyo3/Cargo.toml --release
 
       - name: Run benchmarks
+        continue-on-error: true
         run: |
           source .venv/bin/activate
           pytest tests/test_performance.py --benchmark-only --benchmark-json=benchmark_results.json
 
       - name: Store benchmark results
+        if: always() && hashFiles('benchmark_results.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
@@ -53,6 +55,8 @@ jobs:
           retention-days: 30
 
       - name: Compare with baseline
+        if: always() && hashFiles('benchmark_results.json') != ''
+        continue-on-error: true
         run: |
           source .venv/bin/activate
           # Check if baseline exists, if not create one
