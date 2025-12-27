@@ -10,18 +10,23 @@ from pathlib import Path
 # Add the parent directory to the path so we can import formatparse
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Create a mock _formatparse module to allow imports to work
-class MockFormatParse:
-    """Mock _formatparse module for documentation builds"""
-    pass
-
-# Mock the _formatparse module if it's not available
+# Mock the _formatparse module if it's not available (for ReadTheDocs builds)
 try:
     import _formatparse
 except ImportError:
     import sys
     from unittest.mock import MagicMock
+    
+    # Create a mock module with all the attributes that formatparse/__init__.py imports
     _formatparse = MagicMock()
+    _formatparse.parse = MagicMock(name='parse')
+    _formatparse.search = MagicMock(name='search')
+    _formatparse.findall = MagicMock(name='findall')
+    _formatparse.compile = MagicMock(name='compile')
+    _formatparse.ParseResult = MagicMock(name='ParseResult')
+    _formatparse.FormatParser = MagicMock(name='FormatParser')
+    _formatparse.FixedTzOffset = MagicMock(name='FixedTzOffset')
+    
     sys.modules['_formatparse'] = _formatparse
 
 # -- Project information -----------------------------------------------------
