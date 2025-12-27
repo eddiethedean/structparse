@@ -210,53 +210,53 @@ def test_width_multi_int():
 def test_zero_padding_width_flexible():
     """Test that zero-padded width allows 1 to width digits (not just exactly width)"""
     # Should match 1 digit (unpadded)
-    res = parse.parse('{c:02d}', '9')
+    res = parse.parse("{c:02d}", "9")
     assert res is not None
-    assert res.named['c'] == 9
-    
+    assert res.named["c"] == 9
+
     # Should match 2 digits (padded)
-    res = parse.parse('{c:02d}', '09')
+    res = parse.parse("{c:02d}", "09")
     assert res is not None
-    assert res.named['c'] == 9
-    
-    res = parse.parse('{c:02d}', '99')
+    assert res.named["c"] == 9
+
+    res = parse.parse("{c:02d}", "99")
     assert res is not None
-    assert res.named['c'] == 99
-    
+    assert res.named["c"] == 99
+
     # Should NOT match 3+ digits (exceeds width)
-    res = parse.parse('{c:02d}', '100')
+    res = parse.parse("{c:02d}", "100")
     assert res is None
-    
-    res = parse.parse('{c:02d}', '009')
+
+    res = parse.parse("{c:02d}", "009")
     assert res is None
-    
+
     # Test with 5-digit width
-    res = parse.parse('{c:05d}', '42')
+    res = parse.parse("{c:05d}", "42")
     assert res is not None
-    assert res.named['c'] == 42
-    
-    res = parse.parse('{c:05d}', '00042')
+    assert res.named["c"] == 42
+
+    res = parse.parse("{c:05d}", "00042")
     assert res is not None
-    assert res.named['c'] == 42
-    
-    res = parse.parse('{c:05d}', '99999')
+    assert res.named["c"] == 42
+
+    res = parse.parse("{c:05d}", "99999")
     assert res is not None
-    assert res.named['c'] == 99999
-    
+    assert res.named["c"] == 99999
+
     # Should NOT match 6+ digits
-    res = parse.parse('{c:05d}', '100000')
+    res = parse.parse("{c:05d}", "100000")
     assert res is None
-    
+
     # Test with sign
-    res = parse.parse('{c:02d}', '-9')
+    res = parse.parse("{c:02d}", "-9")
     assert res is not None
-    assert res.named['c'] == -9
-    
-    res = parse.parse('{c:02d}', '-09')
+    assert res.named["c"] == -9
+
+    res = parse.parse("{c:02d}", "-09")
     assert res is not None
-    assert res.named['c'] == -9
-    
-    res = parse.parse('{c:02d}', '-100')
+    assert res.named["c"] == -9
+
+    res = parse.parse("{c:02d}", "-100")
     assert res is None
 
 
