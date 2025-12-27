@@ -68,23 +68,30 @@ jobs:
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
             .venv/Scripts/python -m pip install --upgrade pip
             .venv/Scripts/python -m pip install maturin pytest
-            .venv/Scripts/python -m pip install -e ".[test]"
           else
             source .venv/bin/activate
             python -m pip install --upgrade pip
             pip install maturin pytest
-            pip install -e ".[test]"
           fi
 
       - name: Build extension module
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            .venv/Scripts/python -m pip install maturin
             .venv/Scripts/maturin develop --manifest-path formatparse-pyo3/Cargo.toml --release
           else
             source .venv/bin/activate
             maturin develop --manifest-path formatparse-pyo3/Cargo.toml --release
+          fi
+
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            .venv/Scripts/python -m pip install hypothesis pytest-cov pytest-benchmark pympler memory_profiler
+          else
+            source .venv/bin/activate
+            pip install hypothesis pytest-cov pytest-benchmark pympler memory_profiler
           fi
 
       - name: Run pytest suite
