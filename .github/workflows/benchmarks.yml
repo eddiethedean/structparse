@@ -33,12 +33,16 @@ jobs:
           source .venv/bin/activate
           python -m pip install --upgrade pip
           pip install maturin pytest
-          pip install -e ".[test]"
 
       - name: Build extension module
         run: |
           source .venv/bin/activate
           maturin develop --manifest-path formatparse-pyo3/Cargo.toml --release
+
+      - name: Install test dependencies
+        run: |
+          source .venv/bin/activate
+          pip install pytest-benchmark hypothesis pytest-cov pympler memory_profiler
 
       - name: Run benchmarks
         continue-on-error: true
