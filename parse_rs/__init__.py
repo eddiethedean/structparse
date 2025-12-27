@@ -8,7 +8,7 @@ from datetime import timedelta, tzinfo
 from typing import Callable
 
 # Import from the Rust extension module
-from _parse_rs import (
+from _parse_rs import (  # type: ignore[import-untyped]
     parse as _parse,
     search as _search,
     findall as _findall,
@@ -143,8 +143,8 @@ def with_pattern(pattern: str, regex_group_count: int = 0):
     """
 
     def decorator(func: Callable) -> Callable:
-        func.pattern = pattern
-        func.regex_group_count = regex_group_count
+        func.pattern = pattern  # type: ignore[attr-defined]
+        func.regex_group_count = regex_group_count  # type: ignore[attr-defined]
         return func
 
     return decorator
